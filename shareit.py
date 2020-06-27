@@ -1,19 +1,57 @@
+#!/bin/python3.6
+
 import os
-import sys
 import hashlib
-import subprocess
 import urllib.request
+import requests
+import argparse
+import json
+
+parser = argparse.ArgumentParser(description="Create sharable local file.")
+parser.add_argument("--port", "-p", default="80", help="custom port of the webserver")
+parser.add_argument("-P", action="store_true", help="test if the port is open (may slow down runtime)")
+parser.add_argument("file", help="path of the file to be shared")
+
+args = parser.parse_args()
+
+# If file does not exist, exit program
+if not os.path.isfile(args.file):
+    print("File does not exist")
+    exit()
+
+# Creating the symlink to the apache folder
+hash_name=hashlib.md5(args.file.encode()).hexdigest()[:10]
+share_path="/var/www/html/share/"+hash_name
+if not os.path.islink(share_path):
+    os.symlink(os.path.abspath(args.file),share_path)
+else:
+    print("Symlink already exists")
 
 
-home = os.path.expanduser("~")
-sh_path = home+"/.share/"
+r = requests.get(url="https://ident.me")
+ip=r.text
 
-if not os.path.exists(sh_path):
-    os.mkdir(sh_path)
+port_api_params={"q":ip}
 
-hash_name=hashlib.md5(sys.argv[1].encode()).hexdigest()[:10]
-if not os.path.exists("/var/www/html/share/"+hash_name):
-    os.symlink(os.path.abspath(sys.argv[1]),"/var/www/html/share/"+hash_name)
+# Testing if the port is open
+if args.P:
+    r = requests.get(url="https://api.hackertarget.com/nmap/", params=port_api_params, stream=True)
+    if r.ok:
+        ports = r.text
+        p_open = False
+        for line in ports.splitlines()[5:-2]:
+            if (line.split()[0].__contains__(args.port)) and (line.split()[0].__contains__(args.port)) and (line.split()[1] == "open"):
+                p_open = True
+                print("")
+        if not p_open == True:
+            print("Port is not open")
+    else:
+        print("Unable to test port access")
 
-ip = urllib.request.urlopen('https://ident.me').read().decode('utf8')
-print("URL: http://"+ip+"/share/"+hash_name)
+if args.port != "80":
+    port = args.port
+else:
+    port = ""
+
+# Writes the url for the file
+print("http://"+ip+":"+port+"/share/"+hash_name)
